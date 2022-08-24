@@ -4,4 +4,4 @@
 from .core import Core
 from .utils import RETRO_DEVICE_ID_JOYPAD as buttons
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
