@@ -17,7 +17,6 @@ class Core:
         self.pixel_format = utils.RETRO_PIXEL_FORMAT.ZERORGB1555
         self.variables = {}
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
-        self.gamefilename = None
 
         self.environment_cb = self.get_environment_cb()
         self.video_refresh_cb = self.get_video_refresh_cb()
@@ -159,9 +158,7 @@ class Core:
             size = 0
         else:
             size = os.path.getsize(filename)
-        # Attempt here to prevent a segfault (assuming filename is deallocated or something), but doesn't seem to work
-        self.gamefilename = filename
-        system_av_info = utils.GAME_INFO(self.gamefilename, 0, size, None)
+        system_av_info = utils.GAME_INFO(filename, 0, size, None)
         self.core.retro_load_game(system_av_info)
 
     ###
