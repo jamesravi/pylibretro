@@ -1,165 +1,222 @@
 # Copyright (C) 2022 James Ravindran
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-from ctypes import cdll, CFUNCTYPE, POINTER, cast
-from ctypes import c_bool, c_int, c_uint, c_int16, c_char_p, c_void_p, c_size_t
+from cffi import FFI
+from inspect import getmembers
 from PIL import Image
 import logging
 import os
+from pathlib import Path
 
 from . import utils
 
 logging.basicConfig(level=logging.INFO)
 
+def cdata_dict(ffi, cd):
+    if isinstance(cd, ffi.CData):
+        try:
+            return ffi.string(cd)
+        except TypeError:
+            try:
+                return [cdata_dict(ffi, x) for x in cd]
+            except TypeError:
+                return {k: cdata_dict(ffi, v) for k, v in getmembers(cd)}
+    else:
+        return cd
+
+def parse_variables(ffi, data):
+    variables = {}
+    pointer = ffi.cast("VARIABLE *", data)
+
+    while True:
+        key = ffi.string(pointer.key).decode("ascii") if pointer.key else None
+        value = ffi.string(pointer.value).decode("ascii") if pointer.value else None
+
+        if key is None and value is None:
+            break
+        else:
+            description, choices = list(map(str.strip, value.split(";")))
+            variables[key] = {"description": description, "choices": choices.split("|"), "value": None}
+
+        pointer = ffi.cast("VARIABLE *", ffi.cast("char *", pointer) + ffi.sizeof("VARIABLE"))
+
+    return variables
+
 class Core:
-    def __init__(self, filename):
+    def __init__(self, corepath, systemdir=".", savedir=".", render=False):
+        self.systemdir = systemdir
+        self.savedir = savedir
+        self.render = render
+        
         self.support_no_game = None
         self.pixel_format = utils.RETRO_PIXEL_FORMAT.ZERORGB1555
         self.variables = {}
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
-
-        self.environment_cb = self.get_environment_cb()
-        self.video_refresh_cb = self.get_video_refresh_cb()
-        self.audio_sample_cb = self.get_audio_sample_cb()
-        self.audio_sample_batch_cb = self.get_audio_sample_batch_cb()
-        self.input_poll_cb = self.get_input_poll_cb()
-        self.input_state_cb = self.get_input_state_cb()
-
-        self.core = cdll.LoadLibrary(filename)
+    
+        self.ffi = FFI()
+        with open(Path(__file__).parent / "preprocessed.h") as file:
+            cdefcontent = file.read()
+        self.ffi.cdef(cdefcontent)
+        self.core = self.ffi.dlopen(corepath)
+        
+        self.ffi.cdef("""
+        typedef struct {
+            char* key;
+            char* value;
+        } VARIABLE;
+        """)
+        
+        self.environment_cb = self.ffi.callback("retro_environment_t", self.retro_environment)
+        self.video_refresh_cb = self.ffi.callback("retro_video_refresh_t", self.retro_video_refresh)
+        self.audio_sample_cb = self.ffi.callback("retro_audio_sample_t", self.retro_audio_sample)
+        self.audio_sample_batch_cb = self.ffi.callback("retro_audio_sample_batch_t", self.retro_audio_sample_batch)
+        self.input_poll_cb = self.ffi.callback("retro_input_poll_t", self.retro_input_poll)
+        self.input_state_cb = self.ffi.callback("retro_input_state_t", self.retro_input_state)
+        
         self.core.retro_set_environment(self.environment_cb)
         self.core.retro_set_video_refresh(self.video_refresh_cb)
         self.core.retro_set_audio_sample(self.audio_sample_cb)
         self.core.retro_set_audio_sample_batch(self.audio_sample_batch_cb)
         self.core.retro_set_input_poll(self.input_poll_cb)
         self.core.retro_set_input_state(self.input_state_cb)
-
-    def get_environment_cb(self):
+        
+    def retro_environment(self, cmd, data):
         # TODO: Not sure when to return True/False, maybe dependant on cmd?
-        @CFUNCTYPE(c_bool, c_uint, POINTER(c_void_p))
-        def retro_environment(cmd, data):
-            logging.debug(f"retro_environment {cmd} {data}")
-            try:
-                cmd = utils.RETRO_ENVIRONMENT(cmd)
-            except ValueError:
+        logging.debug(f"retro_environment {cmd} {data}")
+        # TODO: Could remove this try except and assume every cmd is defined in utils.RETRO_ENVIRONMENT
+        try:
+            cmd = utils.RETRO_ENVIRONMENT(cmd)
+        except ValueError:
+            logging.warning(f"Unhandled env {cmd}")
+            return False
+        match cmd:
+            case utils.RETRO_ENVIRONMENT.GET_SYSTEM_DIRECTORY:
+                char_pp = self.ffi.cast("char **", data)
+                char_pp[0] = self.ffi.new("char[]", self.systemdir.encode("ascii"))
+            case utils.RETRO_ENVIRONMENT.GET_SAVE_DIRECTORY:
+                char_pp = self.ffi.cast("char **", data)
+                char_pp[0] = self.ffi.new("char[]", self.savedir.encode("ascii"))
+            case utils.RETRO_ENVIRONMENT.SET_PIXEL_FORMAT:
+                pixel_format_enum = self.ffi.cast("enum retro_pixel_format *", data)
+                self.pixel_format = utils.RETRO_PIXEL_FORMAT(pixel_format_enum[0])
+            case utils.RETRO_ENVIRONMENT.SET_SUPPORT_NO_GAME:
+                bool_no_game = self.ffi.cast("bool *", data)
+                self.support_no_game = bool_no_game
+            case utils.RETRO_ENVIRONMENT.GET_PREFERRED_HW_RENDER:
+                return False
+            case utils.RETRO_ENVIRONMENT.SET_VARIABLES:
+                self.variables = {**self.variables, **parse_variables(self.ffi, data)}
+            case utils.RETRO_ENVIRONMENT.GET_VARIABLE:
+                variable_ptr = self.ffi.cast("struct retro_variable *", data)
+                key = self.ffi.string(variable_ptr.key).decode()
+                if key in self.variables and self.variables[key]["value"] is not None:
+                    variable_ptr.value = self.ffi.new("char[]", self.variables[key]["value"].encode("utf-8"))
+            case utils.RETRO_ENVIRONMENT.GET_LOG_INTERFACE:
+                # Apparently, CFFI does not support callbacks with variadic arguments, so this is impossible to implement
+                # Logging seems to work with some cores anyway (e.g. Swanstation) so we can ignore it though
+                return False # or just return True regardless?
+            #case RETRO_ENVIRONMENT_GET_CAN_DUPE:
+            #case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY | RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY | RETRO_ENVIRONMENT_GET_CONTENT_DIRECTORY | RETRO_ENVIRONMENT_GET_LIBRETRO_PATH:
+            #case RETRO_ENVIRONMENT_SET_MESSAGE:
+            #case RETRO_ENVIRONMENT_SHUTDOWN:
+            case _:
                 logging.warning(f"Unhandled env {cmd}")
                 return False
-            match cmd:
-                case utils.RETRO_ENVIRONMENT.SET_PIXEL_FORMAT:
-                    self.pixel_format = utils.RETRO_PIXEL_FORMAT(cast(data, POINTER(c_int)).contents.value)
-                case utils.RETRO_ENVIRONMENT.SET_SUPPORT_NO_GAME:
-                    self.support_no_game = cast(data, POINTER(c_bool)).contents.value
-                case utils.RETRO_ENVIRONMENT.GET_VARIABLE:
-                    contents = cast(data, POINTER(utils.VARIABLE)).contents
-                    key, value = contents.key, contents.value
-                    if key in self.variables:
-                        # TODO: Not sure if this works
-                        contents.value = self.variables[key]["value"]
-                    else:
-                        contents.value = None
-                    return True
-                case utils.RETRO_ENVIRONMENT.SET_VARIABLES:
-                    self.variables = {**self.variables, **utils.read_array_of_variables(data)}
-                #case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
-                #case RETRO_ENVIRONMENT_GET_CAN_DUPE:
-                #case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
-                #case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY | RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY | RETRO_ENVIRONMENT_GET_CONTENT_DIRECTORY | RETRO_ENVIRONMENT_GET_LIBRETRO_PATH:
-                #case RETRO_ENVIRONMENT_SET_MESSAGE:
-                #case RETRO_ENVIRONMENT_SHUTDOWN:
-                case _:
-                    logging.warning(f"Unhandled env {cmd}")
-                    return False
-            return True
-
-        return retro_environment
-
-    def get_video_refresh_cb(self):
-        @CFUNCTYPE(None, POINTER(c_void_p), c_uint, c_uint, c_size_t)
-        def retro_video_refresh(data, width, height, pitch):
-            logging.debug("video_refresh %s %s", width, height, pitch)
+        return True
+        
+    def retro_video_refresh(self, data, width, height, pitch):
+        """
+        TODO: Interestingly from libretro.h it seems dropped frames are intentional behaviour:
+        
+        If a frame is not rendered for reasons where a game "dropped" a frame,
+        this still counts as a frame, and \c retro_run() should explicitly dupe
+        a frame if \c RETRO_ENVIRONMENT_GET_CAN_DUPE returns true. In this case,
+        the video callback can take a NULL argument for data.
+        """
+    
+        logging.debug("video_refresh %s %s", width, height, pitch)
+        if self.render:
             if self.pixel_format == utils.RETRO_PIXEL_FORMAT.ZERORGB1555:
-                imagedata = cast(data, c_char_p).value[0:width * height * 2]
+                imagedata = self.ffi.cast("unsigned char *", data)
+                imagedata = bytes(self.ffi.buffer(imagedata, width * height * 2))
                 imagedata = utils.zerorgb1555_to_rgb888(imagedata)
             elif self.pixel_format == utils.RETRO_PIXEL_FORMAT.XRGB8888:
-                imagedata = cast(data, c_char_p).value[0:width * height * 4]
+                imagedata = self.ffi.cast("unsigned char *", data)
+                imagedata = bytes(self.ffi.buffer(imagedata, width * height * 4))
                 imagedata = utils.group_argb8888(imagedata)
             else:
                 raise Exception(self.pixel_format)
             image = Image.new("RGB", (width, height))
             image.putdata(imagedata)
             self.on_video_refresh(image)
-
-        return retro_video_refresh
-
-    def get_audio_sample_cb(self):
-        @CFUNCTYPE(None, c_int16, c_int16)
-        def retro_audio_sample(left, right):
-            logging.debug("audio_sample %s %s", left, right)
-            pass
-
-        return retro_audio_sample
-
-    def get_audio_sample_batch_cb(self):
-        @CFUNCTYPE(c_size_t, c_int16, c_size_t)
-        def retro_audio_sample_batch(data, frames):
-            # I assume this logging debug line won't work? (will have to find a core with sound that doesn't segfault to see)
-            logging.debug("audio_sample_batch %s %s", data, frames)
-            pass
-
-        return retro_audio_sample_batch
-
-    def get_input_poll_cb(self):
-        @CFUNCTYPE(None)
-        def retro_input_poll():
-            logging.debug("input_poll")
-            self.on_input_poll()
-
-        return retro_input_poll
-
-    def get_input_state_cb(self):
-        @CFUNCTYPE(c_int16, c_uint, c_uint, c_uint, c_uint)
-        def retro_input_state(port, device, index, theid):
-            logging.debug("retro_input_state %s %s %s %s", port, device, index, theid)
-            if port or index or device != utils.RETRO_DEVICE_JOYPAD:
-                return 0
-            return self.joystick[utils.RETRO_DEVICE_ID_JOYPAD(theid)]
-
-        return retro_input_state
+        
+    def retro_audio_sample(self, left, right):
+        # TODO: Like on_video_refresh and on_input_poll, have a callback function for this the user can redefine
+        logging.debug("audio_sample %s %s", left, right)
+        pass
+        
+    def retro_audio_sample_batch(self, data, frames):
+        # TODO: Like on_video_refresh and on_input_poll, have a callback function for this the user can redefine
+        # I assume this logging debug line won't work? (will have to find a core with sound that doesn't segfault to see)
+        logging.debug("audio_sample_batch %s %s", data, frames)
+        pass
+        
+    def retro_input_poll(self):
+        logging.debug("input_poll")
+        self.on_input_poll()
+        
+    def retro_input_state(self, port, device, index, theid):
+        # c_int16, c_uint, c_uint, c_uint, c_uint
+        # TODO: Probably have to re-do with CFFI
+        logging.debug("retro_input_state %s %s %s %s", port, device, index, theid)
+        if port or index or device != utils.RETRO_DEVICE_JOYPAD:
+            return 0
+        return self.joystick[utils.RETRO_DEVICE_ID_JOYPAD(theid)]
+        
+    
+    ###
 
     def get_system_info(self):
-        self.core.retro_get_system_info.argtypes = [POINTER(utils.SYSTEM_INFO)]
-        self.core.retro_get_system_info.restype = None
-        system_info = utils.SYSTEM_INFO()
+        system_info = self.ffi.new("struct retro_system_info *")
         self.core.retro_get_system_info(system_info)
-        return utils.struct_to_dict(system_info)
+        return cdata_dict(self.ffi, system_info)
 
     def get_system_av_info(self):
-        self.core.retro_get_system_info.argtypes = [POINTER(utils.SYSTEM_AV_INFO)]
-        self.core.retro_get_system_info.restype = None
-        system_av_info = utils.SYSTEM_AV_INFO()
-        self.core.retro_get_system_info(system_av_info)
-        result = {**utils.struct_to_dict(system_av_info.geometry), **utils.struct_to_dict(system_av_info.timing)}
-        return result
-
+        system_av_info = self.ffi.new("struct retro_system_av_info *")
+        self.core.retro_get_system_av_info(system_av_info)
+        return cdata_dict(self.ffi, system_av_info)
+        
     def set_controller_port_device(self, port=0, device=utils.RETRO_DEVICE_JOYPAD):
-        self.core.retro_set_controller_port_device.argtypes = [c_uint, c_uint]
-        self.core.retro_set_controller_port_device.restype = None
         self.core.retro_set_controller_port_device(port, device)
 
-    def retro_init(self):
+    def init(self):
         self.core.retro_init()
 
-    def retro_run(self):
+    def run(self):
         self.core.retro_run()
 
-    def retro_load_game(self, filename):
-        self.core.retro_load_game.argtypes = [POINTER(utils.GAME_INFO)]
-        self.core.retro_load_game.restype = c_bool
-        if filename is None:
+    def load_game(self, rompath=None):
+        """
+        TODO: If need_fullpath in get_system_info() is True, rompath should be a valid path,
+        and there shouldn't need to be a need to load the entire rom in memory I don't think.
+        Could write a high level wrapper around this class (rename this low-level one RetroCore or core_ or something)
+        and the high level wrapper could mimic JSNES's API (or PyBoy's) or something
+        """
+        if rompath is None:
+            raise Exception("Empty rom path not implemented yet")
+            """
             size = 0
+            rompath_bytes = ""
+            # From libretro.h: "...it is preferable to fabricate something here instead of passing NULL, which will help more cores to succeed."
+            """
         else:
-            size = os.path.getsize(filename)
-        system_av_info = utils.GAME_INFO(filename, 0, size, None)
-        self.core.retro_load_game(system_av_info)
+            #size = os.path.getsize(rompath)
+            rompath_bytes = rompath.encode("utf-8")
+        #game_info = utils.GAME_INFO(rompath_bytes, None, 0, None)
+        game_info = self.ffi.new("struct retro_game_info *")
+        game_info.path = self.ffi.new("char[]", rompath_bytes)
+        game_info.size = len(rompath_bytes)
+        self.core.retro_load_game(game_info)
 
     ###
 
