@@ -7,6 +7,8 @@ from PIL import Image
 import logging
 import os
 from pathlib import Path
+import pycparser_fake_libc
+import subprocess
 
 from . import utils
 
@@ -42,6 +44,16 @@ def parse_variables(ffi, data):
 
     return variables
 
+def preprocess_header(header_file):
+    cmd = ["gcc", "-E", str(header_file), "-D__attribute__(x)=", "-I"+pycparser_fake_libc.directory]
+    #print(" ".join(cmd))
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Unable to preprocess {header_file}, is gcc installed?")
+
 class Core:
     def __init__(self, corepath, systemdir=".", savedir=".", render=False):
         self.systemdir = systemdir
@@ -54,9 +66,10 @@ class Core:
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
     
         self.ffi = FFI()
-        with open(Path(__file__).parent / "preprocessed.h") as file:
-            cdefcontent = file.read()
-        self.ffi.cdef(cdefcontent)
+
+        preprocessed_header = preprocess_header(Path(__file__).parent / "libretro.h")
+        self.ffi.cdef(preprocessed_header)
+        
         self.core = self.ffi.dlopen(corepath)
         
         self.ffi.cdef("""
@@ -129,8 +142,8 @@ class Core:
         TODO: Interestingly from libretro.h it seems dropped frames are intentional behaviour:
         
         If a frame is not rendered for reasons where a game "dropped" a frame,
-        this still counts as a frame, and \c retro_run() should explicitly dupe
-        a frame if \c RETRO_ENVIRONMENT_GET_CAN_DUPE returns true. In this case,
+        this still counts as a frame, and retro_run() should explicitly dupe
+        a frame if RETRO_ENVIRONMENT_GET_CAN_DUPE returns true. In this case,
         the video callback can take a NULL argument for data.
         """
     
