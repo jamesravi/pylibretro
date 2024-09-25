@@ -1,8 +1,6 @@
 # Copyright (C) 2022 James Ravindran
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-from ctypes import Structure, cast, POINTER, sizeof
-from ctypes import c_uint, c_float, c_double, c_char_p, c_bool, c_void_p, c_size_t
 from enum import Enum
 
 RETRO_DEVICE_JOYPAD = 1
@@ -123,75 +121,37 @@ class RETRO_PIXEL_FORMAT(Enum):
     XRGB8888 = 1
     RGB565 = 2
 
-class GAME_GEOMETRY(Structure):
-    _fields_ = [("base_width", c_uint),
-                ("base_height", c_uint),
-                ("max_width", c_uint),
-                ("max_height", c_uint),
-                ("aspect_ratio", c_float)]
+###
 
-class SYSTEM_TIMING(Structure):
-    _fields_ = [("fps", c_double),
-                ("sample_rate", c_double)]
+from inspect import getmembers
 
-class SYSTEM_AV_INFO(Structure):
-    _fields_ = [("geometry", GAME_GEOMETRY),
-                ("timing", SYSTEM_TIMING)]
+def cdata_dict(cd, ffi):
+    if isinstance(cd, ffi.CData):
+        if cd == ffi.NULL:
+            return None
+        try:
+            return ffi.string(cd)
+        except TypeError:
+            try:
+                return [cdata_dict(x, ffi) for x in cd]
+            except TypeError:
+                return {k: cdata_dict(v, ffi) for k, v in getmembers(cd)}
+    else:
+        return cd
 
-class SYSTEM_INFO(Structure):
-    _fields_ = [("library_name", c_char_p),
-                ("library_version", c_char_p),
-                ("valid_extensions", c_char_p),
-                ("need_fullpath", c_bool),
-                ("block_extract", c_bool)]
+def unpack_pixel(pixel_data, pixel_format):
+    if pixel_format == RETRO_PIXEL_FORMAT.ZERORGB1555:
+        r = (pixel_data >> 10) & 0x1F
+        g = (pixel_data >> 5) & 0x1F
+        b = pixel_data & 0x1F
+        r = (r * 255) // 31
+        g = (g * 255) // 31
+        b = (b * 255) // 31
+    elif pixel_format == RETRO_PIXEL_FORMAT.XRGB8888:
+        r = (pixel_data >> 16) & 0xFF
+        g = (pixel_data >> 8) & 0xFF
+        b = pixel_data & 0xFF
+    else:
+        raise Exception(pixel_format)
 
-class GAME_INFO(Structure):
-    _fields_ = [("path", c_char_p),
-                ("data", c_void_p),
-                ("size", c_size_t),
-                ("meta", c_char_p)]
-
-class VARIABLE(Structure):
-    _fields_ = [("key", c_char_p),
-                ("value", c_char_p)]
-
-def struct_to_dict(struct):
-    return {key:getattr(struct, key) for key in dict(struct._fields_).keys()}
-
-def increment_pointer(pointer):
-    void_p = cast(pointer, c_void_p).value + sizeof(VARIABLE)
-    return cast(void_p, POINTER(VARIABLE))
-
-def read_array_of_variables(data):
-    variables = {}
-    pointer = cast(data, POINTER(VARIABLE))
-    while True:
-        contents = pointer.contents
-        key, value = contents.key, contents.value
-        if key is None and value is None:
-            break
-        else:
-            description, choices = list(map(str.strip, value.decode("ascii").split(";")))
-            variables[key] = {"description":description, "choices":choices.split("|"), "value":None}
-        pointer = increment_pointer(pointer)
-    return variables
-
-def zerorgb1555_to_rgb888(data):
-    # TODO: Absolutely no idea if this works, will have to find a core to test with
-    newdata = []
-    for pixel in zip(data[::2],data[1::2]):
-        pixel = (pixel[0] << 16) | pixel[1]
-        #pixel = int.from_bytes(pixel, "big")
-        red_value = ((pixel & 0x7C00) >> 10) << 3
-        green_value = ((pixel & 0x3E0) >> 5) << 3
-        blue_value = (pixel & 0x1F) << 3
-        #print((red_value , green_value , blue_value))
-        newdata.append((red_value, green_value, blue_value))
-    #print(len(newdata))
-    return newdata
-
-def group_argb8888(data):
-    allofthem = []
-    for pixels in zip(*[iter(data)] * 4):
-        allofthem.append(pixels[:-1])
-    return allofthem
+    return r, g, b

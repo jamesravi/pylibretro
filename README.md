@@ -8,7 +8,7 @@
 
 ⚠️ This library is currently (and probably will remain) in a **severe pre-alpha state**. At the moment it is however able to load the 2048 core, press buttons and get screen output (as you can see below!). However, many callbacks and functions aren't handled, other cores (such as the PCSX ReARMed core) segfault etc. Use at your peril.
 
-![](https://raw.githubusercontent.com/jamesravi/pylibretro/master/2048example.gif)
+![](https://raw.githubusercontent.com/jamesravi/pylibretro/master/examples/2048example.gif)
 
 ## Installation
 `pip install pylibretro`
@@ -16,7 +16,7 @@
 (the only dependency is [Pillow](https://pypi.org/project/Pillow/) if you wish to install it manually)
 
 ## Usage
-You can create the GIF shown above by using the [example file](example.py) in this repository. However, here's a condensed, minimal usage example:
+You can create the GIF shown above by using the [example file](examples/example.py) in this repository. However, here's a condensed, minimal usage example:
 
 ```python
 from pylibretro import Core, buttons
