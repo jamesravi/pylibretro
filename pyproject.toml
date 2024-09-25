@@ -1,29 +1,39 @@
-[tool.poetry]
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
 name = "pylibretro"
-version = "0.1.1"
+version = "0.2.0"
 description = "WIP Python library that runs Libretro cores"
-authors = ["James Ravindran"]
-license = "AGPL-3.0-or-later"
+authors = [{name = "James Ravindran"}]
+license = {text = "GPL-3.0-or-later"}
 readme = "README.md"
+requires-python = ">=3.10"
 keywords = ["libretro", "emulator", "retroarch"]
-repository = "https://github.com/jamesravi/pylibretro"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
 ]
+dependencies = [
+    "cffi",
+    "pycparser-fake-libc",
+    "numpy",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-Pillow = "^9.2.0"
+[project.urls]
+Repository = "https://github.com/jamesravi/pylibretro"
 
-[tool.poetry.dev-dependencies]
-pytest = "^7.1.2"
-toml = "^0.10.2"
+[project.optional-dependencies]
+example = ["pillow", "tqdm"]
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pylibretro = ["*.h"]

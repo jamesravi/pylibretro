@@ -1,5 +1,5 @@
 # Copyright (C) 2022 James Ravindran
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from cffi import FFI
 import logging
@@ -17,8 +17,10 @@ def preprocess_header(header_file):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Unable to preprocess {header_file}, is gcc installed?")
+    except subprocess.CalledProcessError:
+        error = f"Unable to preprocess {header_file}, is gcc installed?"
+        error += f"\nCommand to test with: {' '.join(cmd)}"
+        raise RuntimeError(error)
 
 class Core:
     def __init__(self, corepath, systemdir=".", savedir="."):

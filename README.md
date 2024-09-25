@@ -47,6 +47,6 @@ lastframe.show()
 ```
 
 ## Licenses
-pylibretro is licensed under [AGPLv3 or later](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).
+pylibretro is licensed under [GPLv3 or later](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).
 
-Credits to Rob Loach for [noarch](https://github.com/RobLoach/noarch) (which indicated how to call Libretro's API), the RetroArch team for [Libretro](https://www.libretro.com/index.php/api/) itself and also the [2048 core](https://github.com/libretro/libretro-2048) included within this repository as an example. Their corresponding licenses are also included in the [license file](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).
+Credits to the RetroArch team for the [Libretro](https://www.libretro.com/index.php/api/) and also the [2048 core](https://github.com/libretro/libretro-2048) included within this repository as an example. Their corresponding licenses are also included in the [license file](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).

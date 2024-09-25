@@ -1,5 +1,5 @@
 # Copyright (C) 2022 James Ravindran
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from enum import Enum
 
