@@ -138,27 +138,3 @@ def cdata_dict(cd, ffi):
                 return {k: cdata_dict(v, ffi) for k, v in getmembers(cd)}
     else:
         return cd
-
-def unpack_pixel(pixel_data, pixel_format):
-    if pixel_format == RETRO_PIXEL_FORMAT.ZERORGB1555:
-        r = (pixel_data >> 10) & 0x1F
-        g = (pixel_data >> 5) & 0x1F
-        b = pixel_data & 0x1F
-        r = (r * 255) // 31
-        g = (g * 255) // 31
-        b = (b * 255) // 31
-    elif pixel_format == RETRO_PIXEL_FORMAT.XRGB8888:
-        r = (pixel_data >> 16) & 0xFF
-        g = (pixel_data >> 8) & 0xFF
-        b = pixel_data & 0xFF
-    elif pixel_format == RETRO_PIXEL_FORMAT.RGB565:
-        r = (pixel_data >> 11) & 0x1F
-        g = (pixel_data >> 5) & 0x3F
-        b = pixel_data & 0x1F
-        r = (r * 255) // 31
-        g = (g * 255) // 63
-        b = (b * 255) // 31
-    else:
-        raise Exception(pixel_format)
-
-    return r, g, b

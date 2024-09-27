@@ -6,10 +6,6 @@ Example on loading the 2048 core, pressing random buttons for a number of frames
 of the screen's output.
 """
 
-# This allows you to run this file without installing the package (assuming you've cloned the repo) 
-import sys
-sys.path.append("..")
-
 from pylibretro import Core, buttons
 from PIL import Image
 from tqdm import tqdm
@@ -35,8 +31,6 @@ def on_frame(frame):
     frame = Image.fromarray(frame)
     if not any(pixel == (0, 0, 0) for pixel in frame.getdata()) and started:
         frames.append(frame)
-    else:
-        print(started)
 
 # Load the core
 if platform.system() == "Linux":
@@ -62,13 +56,13 @@ directional_keys = [getattr(buttons, x) for x in ["UP", "DOWN", "LEFT", "RIGHT"]
 # Just randomly press directional buttons until we get a certain number of good frames (see on_frame function)
 print("Running 2048 core...")
 number_of_frames = 150
-pbar = tqdm(total=number_of_frames)
-while len(frames) < number_of_frames:
-    for key in directional_keys:
-        core.joystick[key] = random.choice([False, True])
-    core.run()
-    pbar.n = len(frames)
-    pbar.refresh()
+with tqdm(total=number_of_frames) as pbar:
+    while len(frames) < number_of_frames:
+        for key in directional_keys:
+            core.joystick[key] = random.choice([False, True])
+        core.run()
+        pbar.n = len(frames)
+        pbar.refresh()
 
 # Create an animated GIF of the screen's output
 # (adapted from https://stackoverflow.com/a/57751793)

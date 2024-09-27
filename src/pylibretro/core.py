@@ -10,6 +10,9 @@ import numpy as np
 
 from . import utils
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
+
 def preprocess_header(header_file):
     cmd = ["gcc", "-E", str(header_file), "-D__attribute__(x)=", "-I"+pycparser_fake_libc.directory]
     #print(" ".join(cmd))
@@ -24,7 +27,6 @@ def preprocess_header(header_file):
 
 class Core:
     def __init__(self, corepath, systemdir=".", savedir="."):
-        self.support_no_game = False # Do I even need this? Is this being used for anything?
         self.pixel_format = utils.RETRO_PIXEL_FORMAT.ZERORGB1555
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
     
@@ -61,27 +63,20 @@ class Core:
         
     def retro_environment(self, cmd, data):
         # TODO: Not sure when to return True/False, maybe dependant on cmd?
-        logging.debug(f"retro_environment {cmd} {data}")
-        # TODO: Could remove this try except and assume every cmd is defined in utils.RETRO_ENVIRONMENT
-        try:
-            cmd = utils.RETRO_ENVIRONMENT(cmd)
-        except ValueError:
-            logging.warning(f"Unhandled env {cmd}")
-            return False
+        logger.debug(f"retro_environment {cmd} {data}")
+        cmd = utils.RETRO_ENVIRONMENT(cmd)
         match cmd:
-            case utils.RETRO_ENVIRONMENT.SET_SUPPORT_NO_GAME:
-                bool_no_game = self.ffi.cast("bool *", data)
-                self.support_no_game = bool_no_game
             case utils.RETRO_ENVIRONMENT.SET_PIXEL_FORMAT:
                 pixel_format_enum = self.ffi.cast("enum retro_pixel_format *", data)
                 self.pixel_format = utils.RETRO_PIXEL_FORMAT(pixel_format_enum[0])
+                return True
             case _:
-                logging.warning(f"Unhandled env {cmd}")
+                logger.warning(f"Unhandled env {cmd}")
                 return False
-        return True
+        return False
         
     def retro_video_refresh(self, data, width, height, pitch):    
-        logging.debug(f"video_refresh {data} {width} {height} {pitch}")
+        logger.debug(f"video_refresh {data} {width} {height} {pitch}")
         imagedata = self.ffi.cast("unsigned char *", data)
         imagedata = bytes(self.ffi.buffer(imagedata, height * pitch))
         if self.pixel_format in [utils.RETRO_PIXEL_FORMAT.ZERORGB1555, utils.RETRO_PIXEL_FORMAT.RGB565]:
@@ -92,31 +87,44 @@ class Core:
             raise Exception(self.pixel_format)
         imagearray = np.frombuffer(imagedata, dtype=dtype).reshape((height, width))
         image = np.zeros((height, width, 3), dtype=np.uint8)
-        for y in range(height):
-            for x in range(width):
-                pixel = imagearray[y, x]
-                r, g, b = utils.unpack_pixel(pixel, self.pixel_format)
-                image[y, x] = [r, g, b]
+        if self.pixel_format == utils.RETRO_PIXEL_FORMAT.ZERORGB1555:
+            r = (imagearray >> 10) & 0x1F
+            g = (imagearray >> 5) & 0x1F
+            b = imagearray & 0x1F
+            image[..., 0] = (r * 255) // 31
+            image[..., 1] = (g * 255) // 31
+            image[..., 2] = (b * 255) // 31
+        elif self.pixel_format == utils.RETRO_PIXEL_FORMAT.XRGB8888:
+            image[..., 0] = (imagearray >> 16) & 0xFF
+            image[..., 1] = (imagearray >> 8) & 0xFF
+            image[..., 2] = imagearray & 0xFF
+        elif self.pixel_format == utils.RETRO_PIXEL_FORMAT.RGB565:
+            r = (imagearray >> 11) & 0x1F
+            g = (imagearray >> 5) & 0x3F
+            b = imagearray & 0x1F
+            image[..., 0] = (r * 255) // 31
+            image[..., 1] = (g * 255) // 63
+            image[..., 2] = (b * 255) // 31
         self.on_video_refresh(image)
         
     def retro_audio_sample(self, left, right):
         # TODO: Like on_video_refresh and on_input_poll, have a callback function for this the user can redefine
-        logging.debug(f"audio_sample {left} {right}")
+        logger.debug(f"audio_sample {left} {right}")
         
     def retro_audio_sample_batch(self, data, frames):
         # TODO: Like on_video_refresh and on_input_poll, have a callback function for this the user can redefine
         # I assume this logging debug line won't work? (will have to find a core with sound that doesn't segfault to see)
-        logging.debug(f"audio_sample_batch {data} {frames}")
+        logger.debug(f"audio_sample_batch {data} {frames}")
         return -1
         
     def retro_input_poll(self):
-        logging.debug("input_poll")
+        logger.debug("input_poll")
         self.on_input_poll()
         
     def retro_input_state(self, port, device, index, theid):
         # c_int16, c_uint, c_uint, c_uint, c_uint
         # TODO: Probably have to re-do with CFFI
-        logging.debug("retro_input_state %s %s %s %s", port, device, index, theid)
+        logger.debug("retro_input_state %s %s %s %s", port, device, index, theid)
         if port or index or device != utils.RETRO_DEVICE_JOYPAD:
             return 0
         return self.joystick[utils.RETRO_DEVICE_ID_JOYPAD(theid)]
