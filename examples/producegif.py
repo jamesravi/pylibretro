@@ -45,7 +45,7 @@ started = True
 
 directional_keys = [getattr(buttons, x) for x in ["UP", "DOWN", "LEFT", "RIGHT"]]
 
-# Just randomly press directional buttons until we get a certain number of good frames (see on_frame function)
+# Randomly press directional buttons for a certain number of frames
 print("Running 2048 core...")
 number_of_frames = 150
 with tqdm(total=number_of_frames) as pbar:
