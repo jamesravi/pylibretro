@@ -84,18 +84,16 @@ class Core:
         logging.debug(f"video_refresh {data} {width} {height} {pitch}")
         imagedata = self.ffi.cast("unsigned char *", data)
         imagedata = bytes(self.ffi.buffer(imagedata, height * pitch))
-        if self.pixel_format == utils.RETRO_PIXEL_FORMAT.ZERORGB1555:
-            bytes_per_pixel = pitch // 2
+        if self.pixel_format in [utils.RETRO_PIXEL_FORMAT.ZERORGB1555, utils.RETRO_PIXEL_FORMAT.RGB565]:
             dtype = np.uint16
         elif self.pixel_format == utils.RETRO_PIXEL_FORMAT.XRGB8888:
-            bytes_per_pixel = pitch // 4
             dtype = np.uint32
         else:
             raise Exception(self.pixel_format)
-        imagearray = np.frombuffer(imagedata, dtype=dtype).reshape((height, bytes_per_pixel))
-        image = np.zeros((height, bytes_per_pixel, 3), dtype=np.uint8)
+        imagearray = np.frombuffer(imagedata, dtype=dtype).reshape((height, width))
+        image = np.zeros((height, width, 3), dtype=np.uint8)
         for y in range(height):
-            for x in range(bytes_per_pixel):
+            for x in range(width):
                 pixel = imagearray[y, x]
                 r, g, b = utils.unpack_pixel(pixel, self.pixel_format)
                 image[y, x] = [r, g, b]

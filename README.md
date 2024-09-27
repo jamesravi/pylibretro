@@ -1,10 +1,10 @@
 # pylibretro
 
-![](https://img.shields.io/pypi/v/pylibretro)
-![](https://img.shields.io/pypi/status/pylibretro)
-![](https://img.shields.io/pypi/pyversions/pylibretro)
-![](https://img.shields.io/badge/platform-linux-lightgrey)
-![](https://img.shields.io/pypi/l/pylibretro)
+[![](https://img.shields.io/pypi/v/pylibretro)](https://pypi.org/project/pylibretro)
+[![](https://img.shields.io/pypi/status/pylibretro)](https://pypi.org/project/pylibretro)
+[![](https://img.shields.io/pypi/pyversions/pylibretro)](https://pypi.org/project/pylibretro)
+[![](https://img.shields.io/badge/platform-windows%20|%20linux-lightgrey)](https://pypi.org/project/pylibretro)
+[![](https://img.shields.io/pypi/l/pylibretro)](https://pypi.org/project/pylibretro)
 
 ⚠️ This library is currently (and probably will remain) in a **severe pre-alpha state**. At the moment it is however able to load the 2048 core, press buttons and get screen output (as you can see below!). However, many callbacks and functions aren't handled, other cores (such as the PCSX ReARMed core) segfault etc. Use at your peril.
 
@@ -28,25 +28,32 @@ def on_frame(frame):
     lastframe = frame
 
 # Load the core
-core = Core("./2048_libretro.so")
+import platform
+if platform.system() == "Linux":
+    core = Core("./2048_libretro.so")
+elif platform.system() == "Windows":
+    core = Core("2048_libretro.dll")
+
 core.on_video_refresh = on_frame
-core.retro_init()
-core.retro_load_game(None)
+core.init()
+core.load_game(None)
 
 # Start a 2048 game (by pressing the START button for one frame)
 core.joystick[buttons.START] = True
-core.retro_run()
+core.run()
 core.joystick[buttons.START] = False
 
 # Run core for 10 frames
 for i in range(10):
-    core.retro_run()
+    core.run()
 
 # Show the last screen output
+from PIL import Image
+lastframe = Image.fromarray(lastframe)
 lastframe.show()
 ```
 
 ## Licenses
 pylibretro is licensed under [GPLv3 or later](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).
 
-Credits to the RetroArch team for the [Libretro](https://www.libretro.com/index.php/api/) and also the [2048 core](https://github.com/libretro/libretro-2048) included within this repository as an example. Their corresponding licenses are also included in the [license file](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).
+Credits to the RetroArch team for the [libretro API](https://www.libretro.com/index.php/api/) and also the [2048 core](https://github.com/libretro/libretro-2048) included within this repository as an example. Their corresponding licenses are also included in the [license file](https://github.com/jamesravi/pylibretro/blob/master/LICENSE.md).

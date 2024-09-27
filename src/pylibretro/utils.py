@@ -151,6 +151,13 @@ def unpack_pixel(pixel_data, pixel_format):
         r = (pixel_data >> 16) & 0xFF
         g = (pixel_data >> 8) & 0xFF
         b = pixel_data & 0xFF
+    elif pixel_format == RETRO_PIXEL_FORMAT.RGB565:
+        r = (pixel_data >> 11) & 0x1F
+        g = (pixel_data >> 5) & 0x3F
+        b = pixel_data & 0x1F
+        r = (r * 255) // 31
+        g = (g * 255) // 63
+        b = (b * 255) // 31
     else:
         raise Exception(pixel_format)
 
