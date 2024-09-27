@@ -20,6 +20,9 @@ You can create the GIF shown above by using the [example file](examples/example.
 
 ```python
 from pylibretro import Core, buttons
+import platform
+
+from PIL import Image
 
 lastframe = None
 
@@ -28,7 +31,6 @@ def on_frame(frame):
     lastframe = frame
 
 # Load the core
-import platform
 if platform.system() == "Linux":
     core = Core("./2048_libretro.so")
 elif platform.system() == "Windows":
@@ -48,7 +50,6 @@ for i in range(10):
     core.run()
 
 # Show the last screen output
-from PIL import Image
 lastframe = Image.fromarray(lastframe)
 lastframe.show()
 ```

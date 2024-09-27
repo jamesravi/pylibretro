@@ -30,7 +30,7 @@ dependencies = [
 Repository = "https://github.com/jamesravi/pylibretro"
 
 [project.optional-dependencies]
-example = ["pillow", "tqdm"]
+example = ["imageio", "tqdm", "pillow"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

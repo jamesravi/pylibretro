@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from enum import Enum
+from inspect import getmembers
 
 RETRO_DEVICE_JOYPAD = 1
 
@@ -122,8 +123,6 @@ class RETRO_PIXEL_FORMAT(Enum):
     RGB565 = 2
 
 ###
-
-from inspect import getmembers
 
 def cdata_dict(cd, ffi):
     if isinstance(cd, ffi.CData):

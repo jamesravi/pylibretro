@@ -7,10 +7,11 @@ of the screen's output.
 """
 
 from pylibretro import Core, buttons
-from PIL import Image
+import imageio
 from tqdm import tqdm
 import random
 import platform
+import numpy as np
 
 frames = []
 
@@ -18,18 +19,8 @@ frames = []
 started = False
 
 def on_frame(frame):
-    r"""
-    For some reason the 2048 core occasionally returns black (or mostly black) images
-    Not sure if it's something wrong with my implementation instead of the core, but to avoid making this
-    example more convoluted, we'll simply ignore them.
-    Unfortunately, this results in even worse performance (hence the progress bar).
-    """
-
-    # TODO: Don't use PIL, use OpenCV/Numpy, it should be faster
-
     global frames
-    frame = Image.fromarray(frame)
-    if not any(pixel == (0, 0, 0) for pixel in frame.getdata()) and started:
+    if not np.any(np.all(frame == [0, 0, 0], axis=-1)) and started:
         frames.append(frame)
 
 # Load the core
@@ -42,6 +33,7 @@ else:
 core.on_video_refresh = on_frame
 print("System info:", core.get_system_info())
 print("System AV info:", core.get_system_av_info())
+fps = int(core.get_system_av_info()["timing"]["fps"])
 core.init()
 core.load_game(None)
 
@@ -65,8 +57,6 @@ with tqdm(total=number_of_frames) as pbar:
         pbar.refresh()
 
 # Create an animated GIF of the screen's output
-# (adapted from https://stackoverflow.com/a/57751793)
-frames[0].save(fp="2048example.gif", format="GIF", append_images=frames[1:],
-               save_all=True, duration=1000/15, loop=0)
+imageio.mimsave("2048example.gif", frames, loop=0, fps=fps/4)
 
 print("Done! (produced GIF)")
