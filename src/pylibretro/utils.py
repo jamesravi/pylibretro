@@ -110,8 +110,8 @@ class RETRO_DEVICE_ID_JOYPAD(Enum):
     RIGHT = 7
     A = 8
     X = 9
-    L = 10
-    R = 11
+    L1 = 10
+    R1 = 11
     L2 = 12
     R2 = 13
     L3 = 14

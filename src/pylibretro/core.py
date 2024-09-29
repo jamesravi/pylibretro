@@ -10,7 +10,7 @@ import numpy as np
 
 from . import utils
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylibretro")
 logger.setLevel(logging.ERROR)
 
 def preprocess_header(header_file):
@@ -26,7 +26,8 @@ def preprocess_header(header_file):
         raise RuntimeError(error)
 
 class Core:
-    def __init__(self, corepath, systemdir=".", savedir="."):
+    def __init__(self, corepath, system_dir=".", save_dir="."):
+        self.system_dir = system_dir
         self.pixel_format = utils.RETRO_PIXEL_FORMAT.ZERORGB1555
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
     
@@ -69,6 +70,10 @@ class Core:
             case utils.RETRO_ENVIRONMENT.SET_PIXEL_FORMAT:
                 pixel_format_enum = self.ffi.cast("enum retro_pixel_format *", data)
                 self.pixel_format = utils.RETRO_PIXEL_FORMAT(pixel_format_enum[0])
+                return True
+            case utils.RETRO_ENVIRONMENT.GET_SYSTEM_DIRECTORY:
+                c_system_dir = self.ffi.new("char[]", self.system_dir.encode("ascii"))
+                self.ffi.cast("const char **", data)[0] = c_system_dir
                 return True
             case _:
                 logger.warning(f"Unhandled env {cmd}")

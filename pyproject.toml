@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylibretro"
-version = "0.2.2"
+version = "0.3.0"
 description = "WIP Python library that runs Libretro cores"
 authors = [{name = "James Ravindran"}]
 license = {text = "GPL-3.0-or-later"}

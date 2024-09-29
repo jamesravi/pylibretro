@@ -11,7 +11,6 @@ import imageio
 from tqdm import tqdm
 import random
 import platform
-import numpy as np
 
 frames = []
 
@@ -20,7 +19,7 @@ started = False
 
 def on_frame(frame):
     global frames
-    if not np.any(np.all(frame == [0, 0, 0], axis=-1)) and started:
+    if started:
         frames.append(frame)
 
 # Load the core

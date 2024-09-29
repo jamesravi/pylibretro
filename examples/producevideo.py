@@ -58,8 +58,8 @@ print("Maximum resolution:", max_res)
 # Create a video of the screen's output
 video = cv2.VideoWriter("2048example.mp4", cv2.VideoWriter_fourcc(*'mp4v'), fps, tuple(reversed(max_res)))
 for frame in frames:
-    #current_res = list(frame.shape)[:-1]
-    #videoframe = cv2.copyMakeBorder(frame, 0, max_res[1]-current_res[1], 0, current_res[0]-current_res[0], cv2.BORDER_CONSTANT)
+    current_res = list(frame.shape)[:-1]
+    frame = cv2.copyMakeBorder(frame, 0, max_res[1]-current_res[1], 0, current_res[0]-current_res[0], cv2.BORDER_CONSTANT)
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     video.write(frame)
 video.release()
