@@ -122,6 +122,12 @@ class RETRO_PIXEL_FORMAT(Enum):
     XRGB8888 = 1
     RGB565 = 2
 
+class RETRO_MEMORY(Enum):
+    SAVE_RAM = 0
+    RTC = 1
+    SYSTEM_RAM = 2
+    VIDEO_RAM = 3
+
 ###
 
 def cdata_dict(cd, ffi):

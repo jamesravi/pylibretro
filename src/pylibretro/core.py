@@ -28,6 +28,7 @@ def preprocess_header(header_file):
 class Core:
     def __init__(self, corepath, system_dir=".", save_dir="."):
         self.system_dir = system_dir
+        self.save_dir = save_dir
         self.pixel_format = utils.RETRO_PIXEL_FORMAT.ZERORGB1555
         self.joystick = {button: False for button in utils.RETRO_DEVICE_ID_JOYPAD}
     
@@ -74,6 +75,10 @@ class Core:
             case utils.RETRO_ENVIRONMENT.GET_SYSTEM_DIRECTORY:
                 c_system_dir = self.ffi.new("char[]", self.system_dir.encode("ascii"))
                 self.ffi.cast("const char **", data)[0] = c_system_dir
+                return True
+            case utils.RETRO_ENVIRONMENT.GET_SAVE_DIRECTORY:
+                c_save_dir = self.ffi.new("char[]", self.save_dir.encode("ascii"))
+                self.ffi.cast("const char **", data)[0] = c_save_dir
                 return True
             case _:
                 logger.warning(f"Unhandled env {cmd}")
@@ -163,6 +168,35 @@ class Core:
                 game_info.data = content
                 game_info.size = len(content)
         self.core.retro_load_game(game_info)
+    
+    def get_ram(self, mem_type=utils.RETRO_MEMORY.SYSTEM_RAM):
+        if type(mem_type) is utils.RETRO_MEMORY:
+            mem_type = mem_type.value
+        size = self.core.retro_get_memory_size(mem_type)
+        if size == 0:
+            return None
+        mem_ptr = self.core.retro_get_memory_data(mem_type)
+        if mem_ptr == self.ffi.NULL:
+            return None
+        mem_array = np.frombuffer(self.ffi.buffer(mem_ptr, size), dtype=np.uint8)
+        return mem_array
+
+    def get_state(self):
+        size = self.core.retro_serialize_size()
+        if size == 0:
+            return None
+        state_data = self.ffi.new(f"char[{size}]")
+        success = self.core.retro_serialize(state_data, size)
+        if success:
+            return bytes(self.ffi.buffer(state_data, size))
+        else:
+            return None
+
+    def set_state(self, state_data):
+        size = len(state_data)
+        state_buffer = self.ffi.new(f"char[{size}]", state_data)
+        success = self.core.retro_unserialize(state_buffer, size)
+        return success
 
     ###
 
